@@ -130,3 +130,8 @@ dmypy.json
 
 # Datasets
 /data
+
+/pkg
+
+# Models
+*.pt

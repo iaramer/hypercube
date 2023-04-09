@@ -43,11 +43,41 @@ class HyperCubeLayer(nn.Module):
         x = (x.movedim(1,2) @ self.weight).movedim(2,1) + self.bias
         x = x.flatten(start_dim=-2)
         return x
-    
+
 
 # TODO: stack the tensors without redundant reshaping,
 #  the 3D output from hc1 is provided directly to hc2
 class HyperCubeBlock(nn.Module):
-    def __init__(self):
-        self.hc1 = HyperCubeLayer()
-        self.hc1 = HyperCubeLayer()
+    def __init__(self, in_features: int, out_sqrt_features: int, bias: bool = True,
+                 device=None, dtype=None):
+        if out_sqrt_features is None:
+            out_sqrt_features = in_features
+        super(HyperCubeBlock, self).__init__()
+        self.hc_layers_1 = HyperCubeLayer(
+            in_features, 
+            int(np.sqrt(in_features)),  # TODO: fix
+            bias=bias,
+            device=device, 
+            dtype=dtype
+        )
+        self.hc_layers_2 = HyperCubeLayer(
+            in_features, 
+            out_sqrt_features,
+            bias=bias,
+            device=device, 
+            dtype=dtype
+        )
+        # self.relu = nn.ReLU()
+            
+    def forward(self, x):
+        x = self.hc_layers_1(x)
+        # TODO: Check if needed
+        # sq = int(np.sqrt(x.shape[-1]))
+        # x = x.view((*x.shape[:-1], sq, sq))
+        # x = x.transpose(-1,-2)
+        # x = x.flatten(start_dim=-2)
+
+        # x = self.relu(x)  # TODO: Experiment with intermediate activation
+        
+        x = self.hc_layers_2(x)
+        return x

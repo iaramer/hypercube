@@ -1,0 +1,22 @@
+fairseq-train data-bin/ptb \
+    --task language_modeling \
+    --arch hc_transformer_base \
+    --optimizer adam \
+    --adam-betas '(0.9, 0.98)' \
+    --clip-norm 0.0 \
+    --lr-scheduler inverse_sqrt \
+    --warmup-updates 4000 \
+    --lr 0.00025  \
+    --dropout 0.3 \
+    --weight-decay 0.1 \
+    --criterion label_smoothed_cross_entropy \
+    --label-smoothing 0.1 \
+    --max-tokens 4096 \
+    --update-freq 4 \
+    --max-update 20000  \
+    --log-format simple \
+    --log-interval 100 \
+    --save-dir checkpoints/ptb_transformer \
+    --keep-last-epochs 5 \
+    --num-workers 2 \
+    --skip-invalid-size-inputs-valid-test
