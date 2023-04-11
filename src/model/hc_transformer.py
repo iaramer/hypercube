@@ -7,7 +7,7 @@ from fairseq.modules.transformer_layer import TransformerEncoderLayer, Transform
 from torch.nn import LayerNorm
 import torch.nn.functional as F
 from .hc_multihead_attention import HCMultiheadAttention
-from .hc import HyperCubeBlock
+from .hc_v2 import HyperCubeBlock
 
 
 # TODO: base on TransformerLanguageModel (!)
@@ -115,8 +115,8 @@ class HCTransformerModel(TransformerModel):
 @register_model_architecture('hc_transformer', 'hc_transformer_wmt_en_de_small')
 def hc_transformer_wmt_en_de(args):
     args.encoder_embed_path = getattr(args, "encoder_embed_path", None)
-    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)  # !
-    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 2048)  # !
+    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
+    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 4096)
     args.encoder_layers = getattr(args, "encoder_layers", 6)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 8)
     args.encoder_normalize_before = getattr(args, "encoder_normalize_before", False)
@@ -172,12 +172,12 @@ def hc_transformer_wmt_en_de(args):
 
 @register_model_architecture("hc_transformer", "hc_transformer_wmt_en_de")
 def transformer_vaswani_wmt_en_de_big(args):
-    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 1024)
-    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 4096)
-    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 16)
+    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 1728)
+    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 8000)
+    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 27)
     args.encoder_normalize_before = getattr(args, "encoder_normalize_before", False)
-    args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 1024)
-    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 4096)
-    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 16)
+    args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 1728)
+    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 8000)
+    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 27)
     args.dropout = getattr(args, "dropout", 0.3)
     hc_transformer_wmt_en_de(args)

@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import Parameter
-from .hc import HyperCubeBlock
+from .hc_v2 import HyperCubeBlock
 
 try:
     from xformers.components.attention import build_attention
