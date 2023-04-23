@@ -21,9 +21,9 @@ except ImportError:
     _xformers_available = False
 
 from fairseq import utils
-from fairseq.incremental_decoding_utils import with_incremental_state
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
+from fairseq.models.fairseq_incremental_decoder import FairseqIncrementalDecoder
 
 
 # TODO: move this into xformers?
@@ -61,8 +61,7 @@ def _mask_for_xformers(mask: Tensor, to_dtype: Optional[torch.dtype] = None):
     return mask
 
 
-@with_incremental_state
-class HCMultiheadAttention(nn.Module):
+class HCMultiheadAttention(FairseqIncrementalDecoder):
     """Multi-headed attention.
 
     See "Attention Is All You Need" for more details.
@@ -80,6 +79,7 @@ class HCMultiheadAttention(nn.Module):
         add_zero_attn=False,
         self_attention=False,
         encoder_decoder_attention=False,
+        dictionary=None,
         q_noise=0.0,
         qn_block_size=8,
         # TODO: pass in config rather than string.
@@ -92,7 +92,7 @@ class HCMultiheadAttention(nn.Module):
             int
         ] = 16,  # This should be part of the config
     ):
-        super().__init__()
+        super().__init__(dictionary)
 
         xformers_att_config = utils.eval_str_dict(xformers_att_config)
         self.use_xformers = xformers_att_config is not None
@@ -134,6 +134,16 @@ class HCMultiheadAttention(nn.Module):
         self.out_proj = quant_noise(
             HyperCubeBlock(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
         )
+        self.multihead_attn = nn.MultiheadAttention(
+            embed_dim, 
+            num_heads,
+            dropout,
+            bias,
+            add_bias_kv,
+            add_zero_attn,
+            kdim,
+            vdim
+        )
 
         if add_bias_kv:
             self.bias_k = Parameter(torch.Tensor(1, 1, embed_dim))
@@ -161,31 +171,47 @@ class HCMultiheadAttention(nn.Module):
 
         self.onnx_trace = False
         self.skip_embed_dim_check = False
+        self.init_incremental_state()
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
     def reset_parameters(self):
         if self.qkv_same_dim:
-            # Empirically observed the convergence to be much better with
-            # the scaled initialization
-            nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_1.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_2.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_3.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_1.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_2.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_3.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_1.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_2.weight, gain=1 / math.sqrt(2))
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_3.weight, gain=1 / math.sqrt(2))
         else:
-            nn.init.xavier_uniform_(self.k_proj.weight)
-            nn.init.xavier_uniform_(self.v_proj.weight)
-            nn.init.xavier_uniform_(self.q_proj.weight)
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_1.weight)
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_2.weight)
+            nn.init.xavier_uniform_(self.v_proj.hc_layers_3.weight)
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_1.weight)
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_2.weight)
+            nn.init.xavier_uniform_(self.k_proj.hc_layers_3.weight)
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_1.weight)
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_2.weight)
+            nn.init.xavier_uniform_(self.q_proj.hc_layers_3.weight)
 
-        nn.init.xavier_uniform_(self.out_proj.weight)
-        if self.out_proj.bias is not None:
-            nn.init.constant_(self.out_proj.bias, 0.0)
+        nn.init.xavier_uniform_(self.out_proj.hc_layers_1.weight)
+        nn.init.xavier_uniform_(self.out_proj.hc_layers_2.weight)
+        nn.init.xavier_uniform_(self.out_proj.hc_layers_3.weight)
+        if self.out_proj.hc_layers_1.bias is not None:
+            nn.init.constant_(self.out_proj.hc_layers_1.bias, 0.0)
+            nn.init.constant_(self.out_proj.hc_layers_2.bias, 0.0)
+            nn.init.constant_(self.out_proj.hc_layers_3.bias, 0.0)
         if self.bias_k is not None:
             nn.init.xavier_normal_(self.bias_k)
         if self.bias_v is not None:
             nn.init.xavier_normal_(self.bias_v)
 
     def _get_reserve_head_index(self, num_heads_to_keep: int):
+        raise NotImplementedError("Not implemented for the Hypercube-based transformer")
         k_proj_heads_norm = []
         q_proj_heads_norm = []
         v_proj_heads_norm = []
@@ -241,6 +267,7 @@ class HCMultiheadAttention(nn.Module):
         return reserve_head_index
 
     def _adaptive_prune_heads(self, reserve_head_index: List[Tuple[int, int]]):
+        raise NotImplementedError("Not implemented for the Hypercube-based transformer")
         new_q_weight = []
         new_q_bias = []
         new_k_weight = []
@@ -536,29 +563,45 @@ class HCMultiheadAttention(nn.Module):
                 )
 
             else:
-                return F.multi_head_attention_forward(
-                    query,
-                    key,
+                query = self.q_proj(query)
+                key = self.k_proj(key)
+                value = self.v_proj(value)
+                attn_output, attn_output_weights = self.multihead_attn(
+                    query, 
+                    key, 
                     value,
-                    self.embed_dim,
-                    self.num_heads,
-                    torch.empty([0]),
-                    torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-                    self.bias_k,
-                    self.bias_v,
-                    self.add_zero_attn,
-                    self.dropout_module.p,
-                    self.out_proj.weight,
-                    self.out_proj.bias,
-                    self.training or self.dropout_module.apply_during_inference,
-                    key_padding_mask,
-                    need_weights,
-                    attn_mask,
-                    use_separate_proj_weight=True,
-                    q_proj_weight=self.q_proj.weight,
-                    k_proj_weight=self.k_proj.weight,
-                    v_proj_weight=self.v_proj.weight,
+                    key_padding_mask=key_padding_mask.bool() if key_padding_mask is not None else None,
+                    need_weights=need_weights,
+                    attn_mask=attn_mask
                 )
+                attn_output = self.out_proj(attn_output)
+                return attn_output, attn_output_weights
+                # raise NotImplementedError("Not implemented for the Hypercube-based model.")
+                
+                # return F.multi_head_attention_forward(
+                #     query,
+                #     key,
+                #     value,
+                #     self.embed_dim,
+                #     self.num_heads,
+                #     torch.empty([0]),
+                #     torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
+                #     self.bias_k,
+                #     self.bias_v,
+                #     self.add_zero_attn,
+                #     self.dropout_module.p,
+                #     self.out_proj.weight,
+                #     self.out_proj.bias,
+                #     self.training or self.dropout_module.apply_during_inference,
+                #     key_padding_mask.bool() if key_padding_mask is not None else None,
+                #     need_weights,
+                #     attn_mask,
+                #     use_separate_proj_weight=True,
+                #     q_proj_weight=self.q_proj.weight,
+                #     k_proj_weight=self.k_proj.weight,
+                #     v_proj_weight=self.v_proj.weight,
+                # )
+
 
         if incremental_state is not None:
             saved_state = self._get_input_buffer(incremental_state)
@@ -878,6 +921,7 @@ class HCMultiheadAttention(nn.Module):
         return attn_weights
 
     def upgrade_state_dict_named(self, state_dict, name):
+        raise NotImplementedError("Not implemented for the Hypercube-based transformer.")
         prefix = name + "." if name != "" else ""
         items_to_add = {}
         keys_to_remove = []

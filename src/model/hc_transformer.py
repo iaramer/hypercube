@@ -10,8 +10,6 @@ from .hc_multihead_attention import HCMultiheadAttention
 from .hc_v2 import HyperCubeBlock
 
 
-# TODO: base on TransformerLanguageModel (!)
-# TODO: add checks for valid HyperCubeBlock dims
 class HCTransformerEncoderLayer(TransformerEncoderLayer):
     def __init__(self, args):
         self.args = args

@@ -12,7 +12,7 @@ class HyperCubeLayer(nn.Module):
     out_last_dim_features: int
     weight: torch.Tensor
 
-    def __init__(self, weight_tensor_shape: tuple(int), bias: bool = True,
+    def __init__(self, weight_tensor_shape: tuple[int], bias: bool = True,
                  equation='bnijk,ijkl->bnjkl', device=None, dtype=None) -> None:
         """
         The weight tensor must be of shape (i,j,k,l)
@@ -26,7 +26,7 @@ class HyperCubeLayer(nn.Module):
         """
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
-        assert len(weight_tensor_shape) != 4, "Input weight tensor shape must be of size 4"
+        assert len(weight_tensor_shape) == 4, "Input weight tensor shape must be of size 4"
         self.weight_tensor_shape = weight_tensor_shape
         self.weight = nn.Parameter(torch.empty(weight_tensor_shape, **factory_kwargs))
         self.equation = equation
